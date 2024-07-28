@@ -1,6 +1,7 @@
 import random
 import time
 
+import sys
 from WarehouseEnv import WarehouseEnv
 import argparse
 import submission

@@ -5,8 +5,36 @@ import random
 
 # TODO: section a : 3
 def smart_heuristic(env: WarehouseEnv, robot_id: int):
-    pass
+    robot = env.get_robot(robot_id)
 
+    # Distance to the nearest package
+    nearest_package_distance = min(
+        manhattan_distance(robot.position, package.position) for package in env.packages
+    ) if env.packages else float('inf')
+
+    # Battery level
+    battery_level = robot.battery
+
+    # Distance to the nearest charging station
+    nearest_charging_station_distance = min(
+        manhattan_distance(robot.position, station) for station in env.charge_stations
+    ) if env.charge_stations else float('inf')
+
+    # Distance to the package destination (if carrying a package)
+    if robot.package:
+        package_destination_distance = manhattan_distance(robot.position, robot.package.destination)
+    else:
+        package_destination_distance = float('inf')
+
+    # Combine the parameters into a heuristic value
+    heuristic_value = (
+            -nearest_package_distance +  # Prefer closer packages
+            battery_level -  # Prefer higher battery levels
+            nearest_charging_station_distance -  # Prefer closer charging stations
+            package_destination_distance  # Prefer closer package destinations
+    )
+
+    return heuristic_value
 class AgentGreedyImproved(AgentGreedy):
     def heuristic(self, env: WarehouseEnv, robot_id: int):
         return smart_heuristic(env, robot_id)
@@ -14,6 +42,7 @@ class AgentGreedyImproved(AgentGreedy):
 
 class AgentMinimax(Agent):
     # TODO: section b : 1
+
     def run_step(self, env: WarehouseEnv, agent_id, time_limit):
         raise NotImplementedError()
 
