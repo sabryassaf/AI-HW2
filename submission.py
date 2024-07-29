@@ -5,38 +5,31 @@ import time
 from func_timeout import func_timeout, FunctionTimedOut
 
 
-# TODO: section a : 3
-def smart_heuristic(env: WarehouseEnv, robot_id: int):
+def charging_value(env: WarehouseEnv, robot_id: int):
     robot = env.get_robot(robot_id)
-
-    # Distance to the nearest package
-    nearest_package_distance = min(
-        manhattan_distance(robot.position, package.position) for package in env.packages
-    ) if env.packages else float('inf')
-
-    # Battery level
-    battery_level = robot.battery
-
-    # Distance to the nearest charging station
-    nearest_charging_station_distance = min(
-        manhattan_distance(robot.position, station) for station in env.charge_stations
-    ) if env.charge_stations else float('inf')
-
-    # Distance to the package destination (if carrying a package)
-    if robot.package:
-        package_destination_distance = manhattan_distance(robot.position, robot.package.destination)
+    enemy = env.get_robot((robot_id + 1) % 2)
+    closet_package = min(env.packages, key=lambda x: manhattan_distance(robot.position, x.position))
+    if robot.credit < enemy.credit:
+        if (closet_package + manhattan_distance(closet_package.position, closet_package.destination)) < robot.battery:
+            return 10
     else:
-        package_destination_distance = float('inf')
+        return 0
 
-    # Combine the parameters into a heuristic value
-    heuristic_value = (
-            -nearest_package_distance +  # Prefer closer packages
-            battery_level -  # Prefer higher battery levels
-            nearest_charging_station_distance -  # Prefer closer charging stations
-            package_destination_distance  # Prefer closer package destinations
-    )
 
-    return heuristic_value
+def package_value(env: WarehouseEnv, robot_id: int):
+    robot = env.get_robot(robot_id)
+    if robot.package is not None:
+        if robot.battery > manhattan_distance(robot.position, robot.package.position) + manhattan_distance(
+                robot.package.position, robot.package.destination):
+            return 999
+    return 0
+
+
+# TODO: section a : 3
+
+def smart_heuristic(env: WarehouseEnv, robot_id: int):
+    agent = env.get_robot(robot_id)
+    return 10000*charging_value(env, robot_id) + package_value(env, robot_id)
 
 
 class AgentGreedyImproved(AgentGreedy):
@@ -111,7 +104,7 @@ class AgentAlphaBeta(Agent):
     def alpha_beta_heuristic(self, env: WarehouseEnv, robot_id):
         if env.done():
             return self.utility(env, robot_id)
-        return smart_heuristic(env, robot_id)
+        return smart_heuristic(env, robot_id) - smart_heuristic(env, (robot_id + 1) % 2)
 
     def alpha_beta(self, env: WarehouseEnv, robot_id, alpha, beta):
         if env.done() or (time.time() - self.start_time >= self.time_limit):
@@ -148,6 +141,7 @@ class AgentAlphaBeta(Agent):
         max_value = max(values)
         index_selected = values.index(max_value)
         return operators[index_selected]
+
 
 class AgentExpectimax(Agent):
     def __init__(self):

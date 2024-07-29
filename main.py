@@ -1,5 +1,6 @@
 import random
 import time
+import pygame
 
 import sys
 from WarehouseEnv import WarehouseEnv
@@ -40,6 +41,10 @@ def run_agents():
     # agent_names = sys.argv
     agent_names = [args.agent0, args.agent1]
     env = WarehouseEnv()
+
+    pygame.init()
+    screen = pygame.display.set_mode((800, 600))
+    pygame.display.set_caption("Warehouse Environment")
 
     if not args.tournament:
         env.generate(args.seed, 2*args.count_steps)
