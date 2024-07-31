@@ -12,7 +12,6 @@ def smart_heuristic(env: WarehouseEnv, robot_id: int):
 
     # Extracting agent's characteristics
     agent_credit = agent.credit
-    agent_position = agent.position
     agent_battery = agent.battery
     agent_holding_package = agent.package
 
@@ -55,7 +54,6 @@ def smart_heuristic(env: WarehouseEnv, robot_id: int):
     return heuristic
 
 
-
 class AgentGreedyImproved(AgentGreedy):
     def heuristic(self, env: WarehouseEnv, robot_id: int):
         return smart_heuristic(env, robot_id)
@@ -66,49 +64,66 @@ class AgentMinimax(Agent):
         self.start_time = None
         self.time_limit = None
 
-    def check_time_limit(self):
-        # Check if the time limit has been reached
-        if time.time() - self.start_time >= self.time_limit:
-            raise FunctionTimedOut
-
-    def utility(self, env: WarehouseEnv, robot_id):
-        # Return the difference in credits between the two robots
-        return env.get_robot(robot_id).credit - env.get_robot((robot_id + 1) % 2).credit
-
     def min_max(self, env: WarehouseEnv, robot_id):
-        if env.done() or (time.time() - self.start_time >= self.time_limit):
+        robot = env.get_robot(robot_id)
+        if env.done() or robot.battery <= 0 or env.num_steps <= 0:
             # If the game is over or the time limit has been reached, return the utility
-            return self.utility(env, robot_id)
+            return smart_heuristic(env, robot_id)
         if robot_id == 0:
             # maximizing player turn
             value = float('-inf')
-            for op in env.get_legal_operators(robot_id):
-                self.check_time_limit()
+            for op in env.get_legal_operators(0):
+                if time.time() - self.start_time >= self.time_limit:
+                    return smart_heuristic(env, robot_id)
                 # Apply the operator to a clone of the environment
                 child = env.clone()
-                child.apply_operator(robot_id, op)
-                value = max(value, self.min_max(child, 1))
+                child.apply_operator(0, op)
+                v = self.min_max(child, 1)
+                value = max(value, v)
             return value
         else:
             value = float('inf')
             # minimizing player turn
-            for op in env.get_legal_operators(robot_id):
-                self.check_time_limit()
+            for op in env.get_legal_operators(1):
+                if time.time() - self.start_time >= self.time_limit:
+                    return smart_heuristic(env, robot_id)
+
                 # Apply the operator to a clone of the environment
                 child = env.clone()
-                child.apply_operator(robot_id, op)
-                value = min(value, self.min_max(child, 0))
+                child.apply_operator(1, op)
+                v = self.min_max(child, 0)
+                value = min(value, v)
             return value
 
-    def run_step(self, env: WarehouseEnv, agent_id, time_limit):
-        self.start_time = time.time()
+    def run_step(self, env: WarehouseEnv, robot_id, time_limit):
         self.time_limit = time_limit
-        operators = env.get_legal_operators(agent_id)
-        children = [env.clone() for _ in operators]
-        values = [self.min_max(child, (agent_id + 1) % 2) for child in children]
-        max_value = max(values)
-        index_selected = values.index(max_value)
-        return operators[index_selected]
+        best_step_move = "move north"
+
+        def best_step():
+            nonlocal best_step_move
+            self.start_time = time.time()
+            # Get the legal operators for the robot
+            operators = env.get_legal_operators(robot_id)
+            # Create a clone of the environment for each operator
+            children = [env.clone() for _ in operators]
+            # Get the value of each child
+            for child, op in zip (children, operators):
+                child.apply_operator(robot_id, op)
+                print("applied operator", op)
+            print("here")
+            values = [self.min_max(child, 1 - robot_id) for child in children]
+            # Get the index of the child with the maximum value
+            max_value = max(values)
+            index_selected = values.index(max_value)
+            best_step_move = operators[index_selected]
+            print("here is best step", best_step_move)
+
+        try:
+            func_timeout(time_limit - 0.1, best_step)
+        except FunctionTimedOut:
+            pass
+
+        return best_step_move
 
 
 class AgentAlphaBeta(Agent):
@@ -122,7 +137,7 @@ class AgentAlphaBeta(Agent):
 
     def check_time_limit(self):
         # Check if the time limit has been reached
-        if time.time() - self.start_time >= self.time_limit:
+        if (time.time() - self.start_time) >= self.time_limit:
             raise FunctionTimedOut
 
     def alpha_beta_heuristic(self, env: WarehouseEnv, robot_id):
@@ -178,7 +193,7 @@ class AgentExpectimax(Agent):
 
     def check_time_limit(self):
         # Check if the time limit has been reached
-        if time.time() - self.start_time >= self.time_limit:
+        if (time.time() - self.start_time) >= self.time_limit:
             raise FunctionTimedOut
 
     def AgentExpectimax(self, env: WarehouseEnv, robot_id):
