@@ -5,31 +5,55 @@ import time
 from func_timeout import func_timeout, FunctionTimedOut
 
 
-def charging_value(env: WarehouseEnv, robot_id: int):
-    robot = env.get_robot(robot_id)
-    enemy = env.get_robot((robot_id + 1) % 2)
-    closet_package = min(env.packages, key=lambda x: manhattan_distance(robot.position, x.position))
-    if robot.credit < enemy.credit:
-        if (closet_package + manhattan_distance(closet_package.position, closet_package.destination)) < robot.battery:
-            return 10
-    else:
-        return 0
-
-
-def package_value(env: WarehouseEnv, robot_id: int):
-    robot = env.get_robot(robot_id)
-    if robot.package is not None:
-        if robot.battery > manhattan_distance(robot.position, robot.package.position) + manhattan_distance(
-                robot.package.position, robot.package.destination):
-            return 999
-    return 0
-
-
-# TODO: section a : 3
-
 def smart_heuristic(env: WarehouseEnv, robot_id: int):
     agent = env.get_robot(robot_id)
-    return 10000*charging_value(env, robot_id) + package_value(env, robot_id)
+    enemy_robot_id = (robot_id + 1) % 2
+    enemy_agent = env.get_robot(enemy_robot_id)
+
+    # Extracting agent's characteristics
+    agent_credit = agent.credit
+    agent_position = agent.position
+    agent_battery = agent.battery
+    agent_holding_package = agent.package
+
+    # Extracting enemy's characteristics
+    enemy_credit = enemy_agent.credit
+    enemy_battery = enemy_agent.battery
+
+    # Weights for features
+    credit_weight = 1000
+    battery_weight = 10
+    enemy_credit_weight = -500
+    enemy_battery_weight = -5
+    holding_package_bonus = 100
+    distance_to_destination_weight = -2
+    distance_to_package_weight = -1
+    winning_state_bonus = 2000
+
+    heuristic = agent_credit * credit_weight
+    heuristic += agent_battery * battery_weight
+    heuristic += enemy_credit * enemy_credit_weight
+    heuristic += enemy_battery * enemy_battery_weight
+
+    if agent_holding_package:
+        distance_to_destination = manhattan_distance(agent.position, agent.package.destination)
+        distance_from_package_to_destination = manhattan_distance(agent.package.position, agent.package.destination)
+        heuristic += distance_from_package_to_destination
+        heuristic += holding_package_bonus
+        heuristic += distance_to_destination * distance_to_destination_weight
+    else:
+        available_packages = [p for p in env.packages if p.on_board]
+        if available_packages:
+            closest_package = min(available_packages, key=lambda p: manhattan_distance(agent.position, p.position))
+            distance_to_package = manhattan_distance(agent.position, closest_package.position)
+            heuristic += distance_to_package * distance_to_package_weight
+
+    # Check if the robot is in a winning state
+    if agent_credit > enemy_credit and agent_battery >= enemy_battery:
+        heuristic += winning_state_bonus
+
+    return heuristic
+
 
 
 class AgentGreedyImproved(AgentGreedy):
