@@ -64,59 +64,62 @@ class AgentMinimax(Agent):
         self.start_time = None
         self.time_limit = None
 
-    def min_max(self, env: WarehouseEnv, robot_id):
-        robot = env.get_robot(robot_id)
-        if env.done() or robot.battery <= 0 or env.num_steps <= 0:
-            # If the game is over or the time limit has been reached, return the utility
+    def check_time_limit(self):
+        if (time.time() - self.start_time) >= (self.time_limit - 0.2):
+            return True
+        return False
+
+    def min_max(self, env: WarehouseEnv, robot_id, depth):
+        # check if the game is over, if we are close the time limit, or if the robot has no battery
+        if env.done() or env.num_steps <= 0 or env.get_robot(
+                robot_id).battery <= 0 or self.check_time_limit() or depth == 0:
             return smart_heuristic(env, robot_id)
-        if robot_id == 0:
-            # maximizing player turn
-            value = float('-inf')
-            for op in env.get_legal_operators(0):
-                if time.time() - self.start_time >= self.time_limit:
-                    return smart_heuristic(env, robot_id)
-                # Apply the operator to a clone of the environment
-                child = env.clone()
-                child.apply_operator(0, op)
-                v = self.min_max(child, 1)
-                value = max(value, v)
-            return value
-        else:
-            value = float('inf')
-            # minimizing player turn
-            for op in env.get_legal_operators(1):
-                if time.time() - self.start_time >= self.time_limit:
-                    return smart_heuristic(env, robot_id)
 
-                # Apply the operator to a clone of the environment
-                child = env.clone()
-                child.apply_operator(1, op)
-                v = self.min_max(child, 0)
-                value = min(value, v)
-            return value
+        # get the legal operators for the robot
+        operators = env.get_legal_operators(robot_id)
+        children = [env.clone() for _ in operators]
+        if robot_id == 0:  # this is our player we are maximizing it
+            cur_max = float('-inf')
+            for child, op in zip(children, operators):
+                child.apply_operator(robot_id, op)
+                v = self.min_max(child, 1, depth - 1)
+                cur_max = max(cur_max, v)
+            return cur_max
 
-    def run_step(self, env: WarehouseEnv, robot_id, time_limit):
+        else:  # this is the enemy player we are minimizing it
+            cur_min = float('inf')
+            for child, op in zip(children, operators):
+                child.apply_operator(robot_id, op)
+                v = self.min_max(child, 0, depth - 1)
+                cur_min = min(cur_min, v)
+            return cur_min
+
+    def run_step(self, env: WarehouseEnv, agent_id, time_limit):
+        # set the time limit for step
         self.time_limit = time_limit
+        self.start_time = time.time()
+
+        # set depth
+        depth = 3
+
+        # default value for step
         best_step_move = "move north"
 
         def best_step():
             nonlocal best_step_move
-            self.start_time = time.time()
-            # Get the legal operators for the robot
-            operators = env.get_legal_operators(robot_id)
-            # Create a clone of the environment for each operator
+            # get the legal operators for the robot
+            operators = env.get_legal_operators(agent_id)
             children = [env.clone() for _ in operators]
-            # Get the value of each child
-            for child, op in zip (children, operators):
-                child.apply_operator(robot_id, op)
-                print("applied operator", op)
-            print("here")
-            values = [self.min_max(child, 1 - robot_id) for child in children]
-            # Get the index of the child with the maximum value
+
+            for child, op in zip(children, operators):
+                child.apply_operator(agent_id, op)
+
+            # get the value of each child
+            values = [self.min_max(child, 1 - agent_id, depth) for child in children]
+            # get the index of the child with the maximum value
             max_value = max(values)
             index_selected = values.index(max_value)
             best_step_move = operators[index_selected]
-            print("here is best step", best_step_move)
 
         try:
             func_timeout(time_limit - 0.1, best_step)
